@@ -2,6 +2,7 @@ package com.example.kotlincoroutinesnflow
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.coroutineScope
@@ -10,7 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlin.system.measureTimeMillis
 
-
+import kotlinx.coroutines.*
 fun testCoroutines()=measureTimeMillis {
     runBlocking {
         for(i in 1..100000) {
@@ -213,12 +214,53 @@ fun <T> getDisplayName(item: T): String {
         else->""
     }
 }
+
+// Coroutines and channels − tutorial
+
+suspend fun loadData(): Int {
+    println("loading...")
+    delay(1000L)
+    println("loaded!")
+    return 42
+}
+
 fun main() {
-    val student = Student("Praveen","Yadav","Mr.")
+    val items = listOf(1, 2, 3, 4, 5)
+    items.fold(0) {
+        // When a lambda has parameters, they go first, followed by '->'
+            acc: Int, i: Int ->
+        print("acc = $acc, i = $i, ")
+        val result = acc + i
+        println("result = $result")
+        // The last expression in a lambda is considered the return value:
+        result
+    }
+    val joinedToString = items.fold("Elements:") { acc, i -> "$acc $i" }
+    print(joinedToString)
+    /*runBlocking {
+        val deferreds: List<Deferred<Int>> = (1..3).map {
+            async {
+                delay(1000L * it)
+                println("Loading $it")
+                it
+            }
+        }
+        val sum = deferreds.awaitAll().sum()
+        println("$sum")
+    }*/
+/*    runBlocking {
+        val deferred: Deferred<Int> = async {
+            loadData()
+        }
+        println("waiting...")
+        println(deferred.await())
+    }*/
+
+    /*val student = Student("Praveen","Yadav","Mr.")
     val professor = Professor("Manoj","Kumar","Dr.","Professor,MCA")
 
     println(getDisplayName(student))
-    println(getDisplayName(professor))
+    println(getDisplayName(professor))*/
     // Two ways to call infix function
 /*
     println(1.plus(4))
