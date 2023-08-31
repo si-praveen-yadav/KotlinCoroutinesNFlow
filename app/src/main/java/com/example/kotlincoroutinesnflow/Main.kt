@@ -12,6 +12,17 @@ import kotlinx.coroutines.runBlocking
 import kotlin.system.measureTimeMillis
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.reduce
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.transform
 
 fun testCoroutines() = measureTimeMillis {
     runBlocking {
@@ -228,15 +239,175 @@ suspend fun loadData(): Int {
 
 fun log(msg: String) = println("[${Thread.currentThread().name}] $msg")
 
+// Flows
+
+fun simple(): Flow<Int> = flow { // flow builder
+    for (i in 1..3) {
+        delay(100) // pretend we are doing something useful here
+        println("Emitting $i")
+        emit(i) // emit next value
+    }
+}
+
+// Cancellation Checks
+fun foo(): Flow<Int> = flow {
+    for (i in 1..5) {
+        println("Emitting $i")
+        emit(i)
+    }
+}
+
+// Long running task
+suspend fun performRequest(request: Int): String {
+    delay(1000) // imitate long-running asynchronous work
+    return "response $request"
+}
+
+fun numbers(): Flow<Int> = flow {
+    try {
+        emit(1)
+        emit(2)
+        println("This line will not execute")
+        emit(3)
+    } finally {
+        println("Finally in numbers")
+    }
+}
+
+fun simple1(): Flow<Int> = flow {
+    for (i in 1..3) {
+        Thread.sleep(100) // pretend we are computing it in CPU-consuming way
+        log("Emitting $i")
+        emit(i) // emit next value
+    }
+}.flowOn(Dispatchers.Default) // RIGHT way to change context for CPU-consuming code in flow builder
+
 
 @OptIn(ExperimentalCoroutinesApi::class)
 fun main() {
-    runBlocking {
+    runBlocking<Unit> {
+        simple().collect { value ->
+            log("Collected $value")
+        }
+    }
+    /*runBlocking {
+        withContext(context) {
+            simple().collect { value ->
+                println(value) // run in the specified context
+            }
+        }
+    }*/
+    // Flow Operators
+    // Map Operator
+    /*runBlocking<Unit> {
+        (1..3).asFlow() // a flow of requests
+            .map { request -> performRequest(request) }
+            .collect { response -> println(response) }
+    }
+    */
+    // Transform Operator
+    /*runBlocking {
+        (1..3).asFlow() // a flow of requests
+            .transform { request ->
+                emit("Making request $request")
+                emit(performRequest(request))
+            }
+            .collect { response -> println(response) }
+    }*/
+
+    // Size-limiting operators
+    /*runBlocking<Unit> {
+        numbers()
+            .take(2) // take only the first two
+            .collect { value -> println(value) }*/
+
+    // Terminal Operators - Reduce Method
+    /*runBlocking {
+        val sum = (1..5).asFlow()
+            .map { it * it } // squares of numbers from 1 to 5
+            .reduce { a, b -> a + b } // sum them (terminal operator)
+        println(sum)
+    }*/
+
+    // Flows are sequential
+    /*runBlocking {
+        (1..5).asFlow()
+            .filter {
+                println("Filter $it")
+                it % 2 == 0
+            }
+            .map {
+                println("Map $it")
+                "string $it"
+            }.collect {
+                println("Collect $it")
+            }
+    }*/
+
+
+    // Make busy loop cancellable
+    // There two methods firstly we can use .onEach { currentCoroutineContext().ensureActive() }
+    // and second method is using cancellable() method which checks currentCoroutineContext().ensureActive() on every collect{}
+    /*
+        runBlocking<Unit> {
+            (1..5).asFlow().cancellable().collect { value ->
+                if (value == 3) cancel()
+                println(value)
+            }
+        }
+    */
+
+    // Non-cancellable IntRange.asFlow() method
+    /*runBlocking<Unit> {
+        (1..5).asFlow().collect { value ->
+            if (value == 3) cancel()
+            println(value)
+        }
+    }*/
+    /*runBlocking<Unit> {
+        foo().collect { value ->
+            if (value == 3) cancel()
+            println(value)
+        }
+    }*/
+    /*runBlocking {
+        withTimeoutOrNull(250) { // Timeout after 250ms
+            simple().collect { value -> println(value) }
+        }
+        println("Done")
+    }
+*/
+    /*// Flows are cold
+//Flows are cold streams similar to sequences — the code inside a flow builder does not run until the flow is collected.
+
+    runBlocking<Unit> {
+        println("Calling simple function...")
+        val flow = simple()
+        println("Calling collect...")
+        flow.collect { value -> println(value) }
+        println("Calling collect again...")
+        flow.collect { value -> println(value) }
+
+        println("Calling collect latest again...")
+        flow.collectLatest { value -> println(value) }
+    }*/
+    /*runBlocking {
+        // Launch a concurrent coroutine to check if the main thread is blocked
+        launch {
+            for (k in 1..3) {
+                println("I'm not blocked $k")
+                delay(100)
+            }
+        }
+        // Collect the flow
+        simple().collect { value -> println(value) }
+    }*/
+    /*runBlocking {
         launch(Dispatchers.Default + CoroutineName("test")) {
             println("I'm working in thread ${Thread.currentThread().name}")
         }
 
-    }
+    }*/
     /*runBlocking {
         log("Started main coroutine")
 // run two background value computations
@@ -289,20 +460,20 @@ fun main() {
         println("main: Who has survived request cancellation?")
         delay(1000) // delay the main thread for a second to see what happens
     }*/
-/*runBlocking {
-    launch { // context of the parent, main runBlocking coroutine
-        println("main runBlocking      : I'm working in thread ${Thread.currentThread().name}")
-    }
-    launch(Dispatchers.Unconfined) { // not confined -- will work with main thread
-        println("Unconfined            : I'm working in thread ${Thread.currentThread().name}")
-    }
-    launch(Dispatchers.Default) { // will get dispatched to DefaultDispatcher
-        println("Default               : I'm working in thread ${Thread.currentThread().name}")
-    }
-    launch(newSingleThreadContext("MyOwnThread")) { // will get its own new thread
-        println("newSingleThreadContext: I'm working in thread ${Thread.currentThread().name}")
-    }
-}*/
+    /*runBlocking {
+        launch { // context of the parent, main runBlocking coroutine
+            println("main runBlocking      : I'm working in thread ${Thread.currentThread().name}")
+        }
+        launch(Dispatchers.Unconfined) { // not confined -- will work with main thread
+            println("Unconfined            : I'm working in thread ${Thread.currentThread().name}")
+        }
+        launch(Dispatchers.Default) { // will get dispatched to DefaultDispatcher
+            println("Default               : I'm working in thread ${Thread.currentThread().name}")
+        }
+        launch(newSingleThreadContext("MyOwnThread")) { // will get its own new thread
+            println("newSingleThreadContext: I'm working in thread ${Thread.currentThread().name}")
+        }
+    }*/
 
 //sampleStart
     /*newSingleThreadContext("Ctx1").use { ctx1 ->
