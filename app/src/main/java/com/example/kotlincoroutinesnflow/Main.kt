@@ -14,15 +14,24 @@ import kotlin.system.measureTimeMillis
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.cancellable
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapConcat
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onCompletion
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.reduce
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.flow.zip
 
 fun testCoroutines() = measureTimeMillis {
     runBlocking {
@@ -282,14 +291,119 @@ fun simple1(): Flow<Int> = flow {
     }
 }.flowOn(Dispatchers.Default) // RIGHT way to change context for CPU-consuming code in flow builder
 
-
+fun requestFlow(i: Int): Flow<String> = flow {
+    emit("$i: First")
+    delay(500) // wait 500 ms
+    emit("$i: Second")
+}
 @OptIn(ExperimentalCoroutinesApi::class)
 fun main() {
+
+
     runBlocking<Unit> {
+        simple()
+            .onCompletion { cause -> println("Flow completed with $cause") }
+            .collect { value ->
+                check(value <= 1) { "Collected $value" }
+                println(value)
+            }
+    }
+   /* runBlocking<Unit> {
+        simple()
+            .catch { e -> println("Caught $e") } // does not catch downstream exceptions
+            .collect { value ->
+                check(value <= 1) { "Collected $value" }
+                println(value)
+            }
+    }*/
+    // flatMapConcat Operator
+    /*runBlocking {
+        val startTime = System.currentTimeMillis() // remember the start time
+        (1..3).asFlow().onEach { delay(100) } // emit a number every 100 ms
+            .flatMapConcat { requestFlow(it) }
+            .collect { value -> // collect and print
+                println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+            }
+    }*/
+
+    // combine operator
+    /*runBlocking {
+        val nums = (1..3).asFlow().onEach { delay(300) } // numbers 1..3 every 300 ms
+        val strs = flowOf("one", "two", "three").onEach { delay(400) } // strings every 400 ms
+        val startTime = System.currentTimeMillis() // remember the start time
+        nums.combine(strs) { a, b -> "$a -> $b" } // compose a single string with "combine"
+            .collect { value -> // collect and print
+                println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+            }
+    }
+
+    runBlocking {
+        val nums = (1..3).asFlow().onEach { delay(300) } // numbers 1..3 every 300 ms
+        val strs = flowOf("one", "two", "three").onEach { delay(400) } // strings every 400 ms
+        val startTime = System.currentTimeMillis() // remember the start time
+        nums.zip(strs) { a, b -> "$a -> $b" } // compose a single string with "zip"
+            .collect { value -> // collect and print
+                println("$value at ${System.currentTimeMillis() - startTime} ms from start")
+            }
+    }*/
+
+    // ZIP Operator
+
+    /*runBlocking {
+        val nums = (1..3).asFlow() // numbers 1..3
+        val strs = flowOf("one", "two", "three") // strings
+        nums.zip(strs) { a, b -> "$a -> $b" } // compose a single string
+            .collect { println(it) } // collect and print
+    }*/
+
+    //Processing the latest value
+    /*runBlocking {
+        val time = measureTimeMillis {
+            simple()
+                .collectLatest { value -> // cancel & restart on the latest value
+                    println("Collecting $value")
+                    delay(300) // pretend we are processing it for 300 ms
+                    println("Done $value")
+                }
+        }
+        println("Collected in $time ms")
+    }*/
+    /*runBlocking {
+        val time = measureTimeMillis {
+            simple()
+                .conflate() // conflate emissions, don't process each one
+                .collect { value ->
+                    delay(300) // pretend we are processing it for 300 ms
+                    println(value)
+                }
+        }
+        println("Collected in $time ms")
+    }*/
+    /*runBlocking {
+        val time = measureTimeMillis {
+            simple()
+                .buffer() // buffer emissions, don't wait
+                .collect { value ->
+                    delay(300) // pretend we are processing it for 300 ms
+                    println(value)
+                }
+        }
+        println("Collected in $time ms")
+    }*/
+//    runBlocking<Unit> {
+//        val time = measureTimeMillis {
+//            simple().collect { value ->
+//                delay(300) // pretend we are processing it for 300 ms
+//                println(value)
+//            }
+//        }
+//        println("Collected in $time ms")
+//    }
+    /*runBlocking<Unit> {
         simple().collect { value ->
             log("Collected $value")
         }
-    }
+    }*/
     /*runBlocking {
         withContext(context) {
             simple().collect { value ->
